@@ -4,6 +4,7 @@
   <title>College Bulletin Board</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Caveat&display=swap');
+    
   
     body, html {
       margin: 0;
@@ -385,7 +386,29 @@
       </div>
     </div>
   
-    <script>
+    <script type="module">
+      // Import the functions you need from the SDKs you need
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+      import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
+      import { getDatabase, ref, set, remove, get, child } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+    
+      // Your web app's Firebase configuration
+      const firebaseConfig = {
+        apiKey: "AIzaSyCJwXMLJZB2yzg4jcmPrvELSfxkJsTjDUY",
+        authDomain: "bulletin-notes-board.firebaseapp.com",
+        databaseURL: "https://bulletin-notes-board-default-rtdb.firebaseio.com",
+        projectId: "bulletin-notes-board",
+        storageBucket: "bulletin-notes-board.appspot.com",
+        messagingSenderId: "607227548244",
+        appId: "1:607227548244:web:a5aab2871b989e6c0113c1",
+        measurementId: "G-EV2R2SC5V5"
+      };
+    
+      // Initialize Firebase
+      const app = initializeApp(firebaseConfig);
+      const analytics = getAnalytics(app);
+      const database = getDatabase(app);
+    
       const boardContainer = document.querySelector('.board-container');
       const board = document.getElementById('board');
       const modal = document.getElementById('noteModal');
@@ -401,17 +424,17 @@
       const passwordErrorMessage = document.getElementById('passwordErrorMessage');
       const colorPicker = document.getElementById('colorPicker');
       const noteInfo = document.getElementById('noteInfo');
-  
+    
       const colors = [
-        'hsl(60, 70%, 80%)',  // Light Yellow
-        'hsl(30, 70%, 80%)',  // Light Orange
-        'hsl(0, 70%, 80%)',   // Light Red
+        'hsl(60, 70%, 80%)', // Light Yellow
+        'hsl(30, 70%, 80%)', // Light Orange
+        'hsl(0, 70%, 80%)', // Light Red
         'hsl(120, 70%, 80%)', // Light Green
         'hsl(180, 70%, 80%)', // Light Cyan
         'hsl(240, 70%, 80%)', // Light Blue
         'hsl(300, 70%, 80%)'  // Light Purple
       ];
-  
+    
       const pinColors = [
         '#ff4444', // Red
         '#33b5e5', // Blue
@@ -421,11 +444,9 @@
         '#ff8800', // Orange
         '#00c851'  // Teal
       ];
-  
+    
       let selectedColor = colors[0];
-      let zIndex = 1;
-      let contextMenuTarget = null;
-  
+    
       // Create color picker options
       colors.forEach((color, index) => {
         const colorOption = document.createElement('div');
@@ -438,8 +459,11 @@
         });
         colorPicker.appendChild(colorOption);
       });
-  
-      function createNote(headline, content, left, top, password, color, name, creationDate) {
+    
+      let zIndex = 1;
+      let contextMenuTarget = null;
+    
+      function createNote(headline, content, left, top, password, color, name, noteId = null) {
         const note = document.createElement('div');
         note.className = 'sticky-note';
         note.style.backgroundColor = color;
@@ -448,31 +472,45 @@
         note.style.zIndex = zIndex++;
         note.style.transform = `rotate(${Math.random() * 6 - 3}deg)`;
         const randomPinColor = pinColors[Math.floor(Math.random() * pinColors.length)];
-        creationDate = creationDate || new Date().toLocaleString();
+        const creationDate = new Date().toLocaleString();
         note.innerHTML = `
           <div class="pin-up" style="background-color: ${randomPinColor};"></div>
           <h3>${headline}</h3>
           <p>${content}</p>
-          <p class="note-info">- ${name}</p>
+          <p class="note-info">Created by: ${name}</p>
         `;
+    
         note.dataset.password = password;
         note.dataset.name = name;
         note.dataset.creationDate = creationDate;
+    
         board.appendChild(note);
-  
+    
+        if (!noteId) {
+          noteId = Date.now().toString();
+          set(ref(database, 'notes/' + noteId), {
+            headline,
+            content,
+            left,
+            top,
+            password,
+            color,
+            name,
+            creationDate
+          });
+        }
+    
         let isDragging = false;
         let startX, startY;
-  
+    
         note.addEventListener('mousedown', startDragging);
         document.addEventListener('mousemove', drag);
         document.addEventListener('mouseup', stopDragging);
-  
         note.addEventListener('touchstart', startDragging);
         document.addEventListener('touchmove', drag);
         document.addEventListener('touchend', stopDragging);
-  
         note.addEventListener('contextmenu', showNoteContextMenu);
-  
+    
         function startDragging(e) {
           e.stopPropagation();
           isDragging = true;
@@ -483,34 +521,29 @@
           note.style.transform = 'scale(1.05) rotate(0deg)';
           note.style.boxShadow = '8px 8px 20px rgba(0,0,0,0.3)';
         }
-  
+    
         function drag(e) {
           if (!isDragging) return;
           e.preventDefault();
-  
           const clientX = e.clientX || e.touches[0].clientX;
           const clientY = e.clientY || e.touches[0].clientY;
-  
           const newLeft = clientX - startX - board.offsetLeft;
           const newTop = clientY - startY - board.offsetTop;
-  
           const maxX = board.clientWidth - note.offsetWidth;
           const maxY = board.clientHeight - note.offsetHeight;
-  
           note.style.left = Math.max(0, Math.min(newLeft, maxX)) + 'px';
           note.style.top = Math.max(0, Math.min(newTop, maxY)) + 'px';
         }
-  
+    
         function stopDragging() {
           if (isDragging) {
             isDragging = false;
             note.style.transition = 'all 0.3s ease';
             note.style.transform = `rotate(${Math.random() * 6 - 3}deg)`;
             note.style.boxShadow = '5px 5px 15px rgba(0,0,0,0.2)';
-            saveNotes();
           }
         }
-  
+    
         function showNoteContextMenu(e) {
           e.preventDefault();
           contextMenu.style.display = 'block';
@@ -519,225 +552,111 @@
           contextMenuTarget = note;
           deleteNoteOption.style.display = 'block';
           addNoteHereOption.style.display = 'none';
-          noteInfo.textContent = `Created by: ${note.dataset.name}
-                                  Date: ${note.dataset.creationDate}`;
+          noteInfo.textContent = `Created by: ${note.dataset.name} Date: ${note.dataset.creationDate}`;
           noteInfo.style.display = 'block';
           deleteNoteOption.onclick = () => {
             if (note.dataset.password) {
-              showPasswordModal(note);
+              showPasswordModal(note, noteId);
             } else {
               board.removeChild(note);
-              saveNotes();
+              remove(ref(database, 'notes/' + noteId));
             }
             contextMenu.style.display = 'none';
           };
         }
       }
-  
-      function showPasswordModal(note) {
+    
+      function showPasswordModal(note, noteId) {
         passwordModal.style.display = 'block';
         passwordInput.value = '';
         passwordErrorMessage.textContent = '';
         passwordInput.focus();
-  
         passwordSubmit.onclick = () => {
           if (passwordInput.value === note.dataset.password) {
             board.removeChild(note);
             passwordModal.style.display = 'none';
-            saveNotes();
+            remove(ref(database, 'notes/' + noteId));
           } else {
             passwordErrorMessage.textContent = "Incorrect password. Please try again.";
             passwordInput.value = '';
           }
         };
       }
-  
-      // Hide context menu and password modal when clicking outside
+    
       document.addEventListener('click', function(e) {
         if (e.target.closest('.context-menu') === null) {
           contextMenu.style.display = 'none';
         }
-        if (e.target === passwordModal) {
-          passwordModal.style.display = 'none';
-        }
       });
-  
-      // Board dragging functionality
-      let isBoardDragging = false;
-      let boardStartX, boardStartY;
-  
-      board.addEventListener('mousedown', startBoardDrag);
-      document.addEventListener('mousemove', dragBoard);
-      document.addEventListener('mouseup', stopBoardDrag);
-  
-      function startBoardDrag(e) {
-        if (e.target === board) {
-          isBoardDragging = true;
-          boardStartX = e.clientX - board.offsetLeft;
-          boardStartY = e.clientY - board.offsetTop;
-          board.style.cursor = 'grabbing';
-        }
-      }
-  
-      function dragBoard(e) {
-        if (!isBoardDragging) return;
+    
+      board.addEventListener('contextmenu', function(e) {
         e.preventDefault();
-  
-        const newLeft = e.clientX - boardStartX;
-        const newTop = e.clientY - boardStartY;
-  
-        const maxX = boardContainer.clientWidth - board.clientWidth;
-        const maxY = boardContainer.clientHeight - board.clientHeight;
-  
-        board.style.left = Math.max(maxX, Math.min(newLeft, 0)) + 'px';
-        board.style.top = Math.max(maxY, Math.min(newTop, 0)) + 'px';
-      }
-  
-      function stopBoardDrag() {
-        isBoardDragging = false;
-        board.style.cursor = 'move';
-      }
-  
+      });
+    
+      boardContainer.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        const x = e.clientX - board.offsetLeft;
+        const y = e.clientY - board.offsetTop;
+        contextMenu.style.display = 'block';
+        contextMenu.style.left = x + 'px';
+        contextMenu.style.top = y + 'px';
+        contextMenuTarget = null;
+        deleteNoteOption.style.display = 'none';
+        addNoteHereOption.style.display = 'block';
+        noteInfo.style.display = 'none';
+        addNoteHereOption.onclick = () => {
+          openModal(x, y);
+          contextMenu.style.display = 'none';
+        };
+      });
+    
       closeBtn.onclick = function() {
-        modal.style.display = "none";
-      }
-  
+        modal.style.display = 'none';
+      };
+    
       window.onclick = function(event) {
         if (event.target == modal) {
-          modal.style.display = "none";
+          modal.style.display = 'none';
         }
-      }
-  
-      noteForm.onsubmit = function(e) {
-        e.preventDefault();
-        const name = document.getElementById('noteName').value;
-        const headline = document.getElementById('noteHeadline').value;
-        const content = document.getElementById('noteContent').value;
-        const password = document.getElementById('notePassword').value;
-  
-        if (containsBadLanguage(headline) || containsBadLanguage(content)) {
-          errorMessage.textContent = 'Please use appropriate language.';
-          return;
-        }
-  
-        let left, top;
-        if (contextMenuTarget === board) {
-          left = parseInt(contextMenu.style.left) - board.offsetLeft;
-          top = parseInt(contextMenu.style.top) - board.offsetTop;
-        } else {
-          left = Math.random() * (board.offsetWidth - 200);
-          top = Math.random() * (board.offsetHeight - 200);
-        }
-  
-        createNote(headline, content, left, top, password, selectedColor, name);
-        modal.style.display = "none";
-        noteForm.reset();
-        contextMenuTarget = null;
-        saveNotes();
-      }
-  
-      function containsBadLanguage(text) {
-    const badWords = new Set([
-        'fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'piss', 
-        'dick', 'cock', 'pussy', 'asshole', 'bastard', 'slut', 
-        'douche', 'cunt', 'motherfucker', 'fag', 'faggot', 'twat',
-        'tits', 'wanker', 'wank', 'prick', 'piss', 'bastard', 
-        'smegma', 'cocksucker', 'nutjob', 'retard', 'skank', 'ho',
-        'minger', 'tosser', 'bollocks', 'gobshite', 'shag', 'pikey',
-        'scrote', 'bellend', 'douchebag', 'jizz', 'spunk', 'clit',
-        'buttplug', 'fisting', 'tramp', 'whore', 'cunt', 'gash', 
-        'hymen', 'semen', 'syphilis', 'turd', 'cum', 'bukkake', 
-        'blowjob', 'handjob', 'suck', 'sucker', 'titty', 'tittyfuck',
-        'dirty', 'sexy', 'bimbo', 'pimp', 'ho', 'prostitute', 
-        'escort', 'fistfuck', 'bastard', 'cockhead', 'dildo', 
-        'douchebag', 'shithead', 'asswipe', 'cocksucking', 'shitfaced',
-        'assclown', 'dumbass', 'fuckface', 'shitbag', 'shitstain',
-        'fucker', 'fuckwit', 'fucktard', 'sodomite', 'kike', 'chink',
-        'gook', 'raghead', 'spic', 'wetback', 'nigger', 'dyke',
-        'tranny', 'hermaphrodite', 'bastard', 'jackass', 'cumbucket',
-        'cuntface', 'asshat', 'asshole', 'buttface', 'dickhead',
-        'prickhead', 'cockface', 'motherfucking', 'bitchass', 
-        'faggoty', 'coont', 'shitlord', 'spermbag', 'shitcunt',
-        'scumbag', 'whore', 'slutbag', 'pussypuff', 'faggotass',
-        'buttplug', 'analbead', 'douchewaffle', 'fucktard', 'shitweasel',
-        'fucknugget', 'dicknugget', 'buttfucker', 'assfucker', 'mothafucka',
-        'assmonkey', 'dickbrain', 'fuckknuckle', 'cuntmuncher', 'wankstain'
-    ]);
-
-    // Lowercase the input text for case-insensitive comparison
-    const lowerCaseText = text.toLowerCase();
+      };
     
-    // Check if any bad word is included in the text
-    for (const word of badWords) {
-        const regex = new RegExp(`\\b${word}\\b`, 'i');
-        if (regex.test(lowerCaseText)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-  
-      // Board right-click context menu
-      board.addEventListener('contextmenu', function(e) {
-        if (e.target === board) {
-          e.preventDefault();
-          contextMenu.style.display = 'block';
-          contextMenu.style.left = (e.clientX - board.offsetLeft) + 'px';
-          contextMenu.style.top = (e.clientY - board.offsetTop) + 'px';
-          contextMenuTarget = board;
-          deleteNoteOption.style.display = 'none';
-          addNoteHereOption.style.display = 'block';
-          noteInfo.style.display = 'none';
-          addNoteHereOption.onclick = () => {
-            modal.style.display = "block";
-            errorMessage.textContent = '';
-            contextMenu.style.display = 'none';
-          };
-        }
+      function openModal(x, y) {
+        modal.style.display = 'block';
+        noteForm.onsubmit = function(event) {
+          event.preventDefault();
+          const headline = document.getElementById('noteHeadline').value;
+          const content = document.getElementById('noteContent').value;
+          const password = document.getElementById('notePassword').value;
+          const name = document.getElementById('noteName').value;
+    
+          if (!headline || !content || !name) {
+            errorMessage.textContent = 'Headline, Content, and Name are required.';
+            return;
+          }
+    
+          errorMessage.textContent = '';
+          createNote(headline, content, x, y, password, selectedColor, name);
+          modal.style.display = 'none';
+        };
+      }
+    
+      // Load notes from Firebase on page load
+      window.addEventListener('load', () => {
+        const notesRef = ref(database, 'notes/');
+        get(notesRef).then((snapshot) => {
+          if (snapshot.exists()) {
+            const notes = snapshot.val();
+            for (const noteId in notes) {
+              const { headline, content, left, top, password, color, name } = notes[noteId];
+              createNote(headline, content, left, top, password, color, name, noteId);
+            }
+          } else {
+            console.log("No notes found");
+          }
+        }).catch((error) => {
+          console.error("Error fetching notes:", error);
+        });
       });
-  
-      // Save notes to localStorage
-      function saveNotes() {
-        const notes = Array.from(board.getElementsByClassName('sticky-note')).map(note => ({
-          headline: note.querySelector('h3').textContent,
-          content: note.querySelector('p').textContent,
-          left: note.style.left,
-          top: note.style.top,
-          password: note.dataset.password,
-          color: note.style.backgroundColor,
-          name: note.dataset.name,
-          creationDate: note.dataset.creationDate
-        }));
-        localStorage.setItem('boardNotes', JSON.stringify(notes));
-      }
-  
-      // Load notes from localStorage
-      function loadNotes() {
-        const savedNotes = JSON.parse(localStorage.getItem('boardNotes'));
-        if (savedNotes) {
-          savedNotes.forEach(note => {
-            createNote(
-              note.headline,
-              note.content,
-              parseInt(note.left),
-              parseInt(note.top),
-              note.password,
-              note.color,
-              note.name,
-              note.creationDate
-            );
-          });
-        } else {
-          // Create some initial notes if no saved notes exist
-          createNote('Welcome!', 'This is the college bulletin board. Right-click on the board to add your own notes!', 50, 50, '', colors[0], 'Admin');
-          createNote('Club Meeting', 'Chess club meets every Tuesday at 7 PM in the Student Center.', 300, 100, '', colors[1], 'Chess Club');
-          createNote('Lost and Found', 'Found a blue notebook near the library. Contact Jane at 555-1234.', 100, 300, '', colors[2], 'Jane Doe');
-        }
-      }
-  
-      // Load notes when the page loads
-      window.addEventListener('load', loadNotes);
-    </script>
+    </script>    
   </body>
   </html>
