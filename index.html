@@ -390,7 +390,7 @@
       // Import the functions you need from the SDKs you need
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
       import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
-      import { getDatabase, ref, set, get, update, child } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+      import { getDatabase, ref, set, get, remove, update, child } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
     
       // Your web app's Firebase configuration
       const firebaseConfig = {
@@ -464,31 +464,31 @@
       let contextMenuTarget = null;
     
       function createNote(headline, content, left, top, password, color, name, noteId = null) {
-        const note = document.createElement('div');
-        note.className = 'sticky-note';
-        note.style.backgroundColor = color;
-        note.style.left = left + 'px';
-        note.style.top = top + 'px';
-        note.style.zIndex = zIndex++;
-        note.style.transform = `rotate(${Math.random() * 6 - 3}deg)`;
-        const randomPinColor = pinColors[Math.floor(Math.random() * pinColors.length)];
-        const creationDate = new Date().toLocaleString();
-        note.innerHTML = `
-          <div class="pin-up" style="background-color: ${randomPinColor};"></div>
-          <h3>${headline}</h3>
-          <p>${content}</p>
-          <p class="note-info">Created by: ${name}</p>
-        `;
-    
-        note.dataset.password = password;
-        note.dataset.name = name;
-        note.dataset.creationDate = creationDate;
-    
-        board.appendChild(note);
-    
-        if (!noteId) {
-          noteId = Date.now().toString();
-          set(ref(database, 'notes/' + noteId), {
+    const note = document.createElement('div');
+    note.className = 'sticky-note';
+    note.style.backgroundColor = color;
+    note.style.left = left + 'px';
+    note.style.top = top + 'px';
+    note.style.zIndex = zIndex++;
+    note.style.transform = `rotate(${Math.random() * 6 - 3}deg)`;
+    const randomPinColor = pinColors[Math.floor(Math.random() * pinColors.length)];
+    const creationDate = new Date().toLocaleString();
+    note.innerHTML = `
+        <div class="pin-up" style="background-color: ${randomPinColor};"></div>
+        <h3>${headline}</h3>
+        <p>${content}</p>
+        <p class="note-info">- ${name}</p>
+    `;
+
+    note.dataset.password = password;
+    note.dataset.name = name;
+    note.dataset.creationDate = creationDate;
+    note.dataset.noteId = noteId ? noteId : Date.now().toString(); // Set noteId as data attribute
+
+    if (!noteId) {
+        // Create a new note in Firebase if no noteId is provided
+        noteId = note.dataset.noteId;
+        set(ref(database, 'notes/' + noteId), {
             headline,
             content,
             left,
@@ -497,8 +497,10 @@
             color,
             name,
             creationDate: new Date().toLocaleString()
-          });
-        }
+        });
+    }
+    
+    board.appendChild(note);
     
         let isDragging = false;
         let startX, startY;
@@ -545,25 +547,61 @@
         }
 
         function stopDragging() {
-    if (isDragging) {
-        isDragging = false;
-        note.style.transition = 'all 0.3s ease';
-        note.style.transform = `rotate(${Math.random() * 6 - 3}deg)`;
-        note.style.boxShadow = '5px 5px 15px rgba(0,0,0,0.2)';
+            if (isDragging) {
+                isDragging = false;
+                note.style.transition = 'all 0.3s ease';
+                note.style.transform = `rotate(${Math.random() * 6 - 3}deg)`;
+                note.style.boxShadow = '5px 5px 15px rgba(0,0,0,0.2)';
 
-        // Update the note's position in Firebase
-        const left = parseInt(note.style.left, 10);
-        const top = parseInt(note.style.top, 10);
+                // Update the note's position in Firebase
+                const left = parseInt(note.style.left, 10);
+                const top = parseInt(note.style.top, 10);
 
-        // Update the position in Firebase
-        update(ref(database, 'notes/' + noteId), {
-            left: left,
-            top: top
-        }).catch(error => {
-            console.error('Error updating position in Firebase:', error);
-        });
-    }
-}
+                // Update the position in Firebase
+                update(ref(database, 'notes/' + noteId), {
+                    left: left,
+                    top: top
+                }).catch(error => {
+                    console.error('Error updating position in Firebase:', error);
+                });
+            }
+        }
+
+            // Board dragging functionality
+        let isBoardDragging = false;
+        let boardStartX, boardStartY;
+
+        board.addEventListener('mousedown', startBoardDrag);
+        document.addEventListener('mousemove', dragBoard);
+        document.addEventListener('mouseup', stopBoardDrag);
+
+        function startBoardDrag(e) {
+          if (e.target === board) {
+            isBoardDragging = true;
+            boardStartX = e.clientX - board.offsetLeft;
+            boardStartY = e.clientY - board.offsetTop;
+            board.style.cursor = 'grabbing';
+          }
+        }
+
+        function dragBoard(e) {
+          if (!isBoardDragging) return;
+          e.preventDefault();
+
+          const newLeft = e.clientX - boardStartX;
+          const newTop = e.clientY - boardStartY;
+
+          const maxX = boardContainer.clientWidth - board.clientWidth;
+          const maxY = boardContainer.clientHeight - board.clientHeight;
+
+          board.style.left = Math.max(maxX, Math.min(newLeft, 0)) + 'px';
+          board.style.top = Math.max(maxY, Math.min(newTop, 0)) + 'px';
+        }
+
+        function stopBoardDrag() {
+          isBoardDragging = false;
+          board.style.cursor = 'move';
+        }
 
     
         function showNoteContextMenu(e) {
@@ -571,22 +609,35 @@
           contextMenu.style.display = 'block';
           contextMenu.style.left = (e.clientX - board.offsetLeft) + 'px';
           contextMenu.style.top = (e.clientY - board.offsetTop) + 'px';
-          contextMenuTarget = note;
-          deleteNoteOption.style.display = 'block';
-          addNoteHereOption.style.display = 'none';
-          noteInfo.textContent = `Created by: ${note.dataset.name} Date: ${note.dataset.creationDate}`;
-          noteInfo.style.display = 'block';
-          deleteNoteOption.onclick = () => {
-            if (note.dataset.password) {
-              showPasswordModal(note, noteId);
-            } else {
-              board.removeChild(note);
-              remove(ref(database, 'notes/' + noteId));
-            }
-            contextMenu.style.display = 'none';
-          };
+          contextMenuTarget = e.target.closest('.sticky-note');
+          
+          if (contextMenuTarget) {
+            const noteId = contextMenuTarget.dataset.noteId; // Retrieve the noteId from the target note
+            deleteNoteOption.style.display = 'block';
+            addNoteHereOption.style.display = 'none';
+            noteInfo.textContent = `Created by: ${contextMenuTarget.dataset.name} Date: ${contextMenuTarget.dataset.creationDate}`;
+            noteInfo.style.display = 'block';
+            
+            deleteNoteOption.onclick = () => {
+              if (contextMenuTarget.dataset.password) {
+                showPasswordModal(contextMenuTarget, noteId);
+              } else {
+                board.removeChild(contextMenuTarget); // Remove note from the board
+                console.log('Attempting to delete note with ID:', noteId);
+                remove(ref(database, 'notes/' + noteId)) // Remove note from Firebase
+                  .then(() => {
+                    console.log('Note deleted successfully from Firebase');
+                  })
+                  .catch((error) => {
+                    console.error('Error deleting note from Firebase:', error);
+                  });
+              }
+              contextMenu.style.display = 'none';
+            };
+          }
         }
       }
+
     
       function showPasswordModal(note, noteId) {
         passwordModal.style.display = 'block';
@@ -605,42 +656,64 @@
         };
       }
     
+      // Variables to keep track of context menu position
+      let contextMenuX = 0;
+      let contextMenuY = 0;
+
+      // Hide the context menu when clicking outside of it
       document.addEventListener('click', function(e) {
-        if (e.target.closest('.context-menu') === null) {
+        if (!e.target.closest('.context-menu')) {
           contextMenu.style.display = 'none';
+          passwordModal.style.display = 'none';
         }
       });
-    
-      board.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
+
+    // Handle the right-click on the board to show the context menu
+    board.addEventListener('contextmenu', function(e) {
+        if (e.target === board) {
+          e.preventDefault();
+
+          // Calculate the position of the click relative to the board
+          const rect = board.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+
+          // Log for debugging
+          console.log(`Context Menu Position - x: ${x}, y: ${y}`);
+
+          // Set the position of the context menu
+          contextMenu.style.display = 'block';
+          contextMenu.style.left = `${x}px`;
+          contextMenu.style.top = `${y}px`;
+
+          // Configure context menu options
+          contextMenuTarget = board;
+          deleteNoteOption.style.display = 'none';
+          addNoteHereOption.style.display = 'block';
+          noteInfo.style.display = 'none';
+
+          // Set up the click event for the 'Add Note Here' option
+          addNoteHereOption.onclick = () => {
+            openModal(x, y);
+            contextMenu.style.display = 'none';
+          };
+        }
       });
-    
-      boardContainer.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-        const x = e.clientX - board.offsetLeft;
-        const y = e.clientY - board.offsetTop;
-        contextMenu.style.display = 'block';
-        contextMenu.style.left = x + 'px';
-        contextMenu.style.top = y + 'px';
-        contextMenuTarget = null;
-        deleteNoteOption.style.display = 'none';
-        addNoteHereOption.style.display = 'block';
-        noteInfo.style.display = 'none';
-        addNoteHereOption.onclick = () => {
-          openModal(x, y);
-          contextMenu.style.display = 'none';
-        };
-      });
-    
+
+
+      // Handle closing the modal
       closeBtn.onclick = function() {
         modal.style.display = 'none';
       };
-    
+
+      // Hide the modal if clicking outside of it
       window.onclick = function(event) {
-        if (event.target == modal) {
+        if (event.target === modal) {
           modal.style.display = 'none';
         }
       };
+
+
     
       function openModal(x, y) {
         modal.style.display = 'block';
@@ -650,6 +723,11 @@
           const content = document.getElementById('noteContent').value;
           const password = document.getElementById('notePassword').value;
           const name = document.getElementById('noteName').value;
+
+      //     if (containsBadLanguage(headline) || containsBadLanguage(content)) {
+      //   errorMessage.textContent = 'Please use appropriate language.';
+      //   return;
+      // }
     
           if (!headline || !content || !name) {
             errorMessage.textContent = 'Headline, Content, and Name are required.';
@@ -661,6 +739,37 @@
           modal.style.display = 'none';
         };
       }
+
+      function containsBadLanguage(text) {
+    const badWords = new Set([
+        'fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'piss', 
+        'dick', 'cock', 'pussy', 'asshole', 'bastard', 'slut', 
+        'douche', 'cunt', 'motherfucker', 'fag', 'faggot', 'twat',
+        'tits', 'wanker', 'wank', 'prick', 'piss', 'bastard', 
+        'smegma', 'cocksucker', 'nutjob', 'retard', 'skank', 'ho',
+        'minger', 'tosser', 'bollocks', 'gobshite', 'shag', 'pikey',
+        'scrote', 'bellend', 'douchebag', 'jizz', 'spunk', 'clit',
+        'buttplug', 'fisting', 'tramp', 'whore', 'cunt', 'gash', 
+        'hymen', 'semen', 'syphilis', 'turd', 'cum', 'bukkake', 
+        'blowjob', 'handjob', 'sucker', 'titty', 'tittyfuck',
+        'dirty', 'bimbo', 'pimp', 'ho', 'prostitute', 
+        'escort', 'fistfuck', 'bastard', 'cockhead', 'dildo', 
+        'douchebag', 'shithead', 'asswipe', 'cocksucking', 'shitfaced',
+        'assclown', 'dumbass', 'fuckface', 'shitbag', 'shitstain',
+        'fucker', 'fuckwit', 'fucktard', 'sodomite', 'kike', 'chink',
+        'gook', 'raghead', 'spic', 'wetback', 'nigger', 'dyke',
+        'tranny', 'hermaphrodite', 'bastard', 'jackass', 'cumbucket',
+        'cuntface', 'asshat', 'asshole', 'buttface', 'dickhead',
+        'prickhead', 'cockface', 'motherfucking', 'bitchass', 
+        'faggoty', 'coont', 'shitlord', 'spermbag', 'shitcunt',
+        'scumbag', 'whore', 'slutbag', 'pussypuff', 'faggotass',
+        'buttplug', 'analbead', 'douchewaffle', 'fucktard', 'shitweasel',
+        'fucknugget', 'dicknugget', 'buttfucker', 'assfucker', 'mothafucka',
+        'assmonkey', 'dickbrain', 'fuckknuckle', 'cuntmuncher', 'wankstain'
+    ]);
+
+      return badWords.some(word => text.toLowerCase().includes(word));
+    }
     
       // Load notes from Firebase on page load
       window.addEventListener('load', () => {
@@ -679,6 +788,6 @@
         console.error("Error fetching notes:", error);
       });
     });
-    </script>    
+    </script>
   </body>
   </html>
